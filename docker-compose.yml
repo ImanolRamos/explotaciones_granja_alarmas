@@ -1,0 +1,6 @@
+services:
+  pushover-notifier:
+    build: .
+    env_file:
+      - .env
+    restart: "no"
