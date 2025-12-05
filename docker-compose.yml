@@ -3,4 +3,6 @@ services:
     build: .
     env_file:
       - .env
-    restart: "no"
+    ports:
+      - "8800:8000"
+    restart: unless-stopped

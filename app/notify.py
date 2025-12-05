@@ -18,6 +18,7 @@ def notify_group(message: str, title: str = "Explotaciones", priority: int = 0):
         "priority": str(priority),
     }
 
+    print(payload)
     headers = {"User-Agent": f"explotaciones-notifier/1.0 ({socket.gethostname()})"}
 
     r = requests.post(PUSHOVER_API, data=payload, headers=headers, timeout=10)
