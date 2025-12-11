@@ -1,0 +1,11 @@
+# ./grafana/provisioning/datasources/datasource.yml
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    # Usa el nombre del servicio de Docker Compose para la URL
+    url: http://prometheus:9090 
+    isDefault: true
+    access: proxy
+    editable: true

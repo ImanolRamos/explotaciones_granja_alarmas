@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 5s # Frecuencia con la que Prometheus revisará las métricas
+
+scrape_configs:
+  # 1. Scrape a Prometheus (para monitorizar su estado)
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # 2. Scrape al plc_reader
+  - job_name: 'plc_reader'
+    # Usa el nombre del servicio de Docker y el puerto 8000 (el que usaremos para exponer métricas)
+    static_configs:
+      - targets: ['plc_reader:8000'] 
+
+  # 3. Scrape al ingestor
+  - job_name: 'ingestor'
+    static_configs:
+      - targets: ['ingestor:8000']

@@ -6,6 +6,14 @@ from dotenv import load_dotenv
 import redis
 import paho.mqtt.client as mqtt
 
+# Añadir la importación
+from prometheus_client import start_http_server, Gauge, Counter
+
+# 1. Definir las métricas globalmente
+REDIS_CONSUMED = Counter('redis_messages_consumed_total', 'Total mensajes consumidos de Redis Stream')
+MQTT_PUBLISHED = Counter('mqtt_messages_published_total', 'Total mensajes individuales MQTT publicados')
+MQTT_BATCH_PUBLISHED = Counter('mqtt_batches_published_total', 'Total mensajes batch MQTT publicados')
+
 
 def env_int(k, d): return int(os.getenv(k, d))
 def env_float(k, d): return float(os.getenv(k, d))
@@ -43,6 +51,10 @@ def should_publish_by_rules(addr: int, value: int, bits: list[int]) -> bool:
 
 def main():
     load_dotenv()
+    
+    # 2. Iniciar el servidor HTTP de métricas antes del bucle principal
+    print("[METRICS] Iniciando servidor de metricas en puerto 8000")
+    start_http_server(8000)
 
     r = redis.Redis(
         host=os.getenv("REDIS_HOST", "redis"),
@@ -120,17 +132,20 @@ def main():
             for i in indices:
                 addr = start_m + i
                 mqttc.publish(f"{topic_base}/{addr}", str(int(bits[i])), qos=qos, retain=retain)
+                MQTT_PUBLISHED.inc() # <- Métrica: publicación individual
 
             last_publish_t = now
 
         if always_batch and can_publish:
             mqttc.publish(json_topic, json.dumps(payload_array), qos=qos, retain=retain)
+            MQTT_BATCH_PUBLISHED.inc() # <- Métrica: publicación batch
             last_publish_t = now
 
         last_bits = bits
 
         # ack
         r.xack(stream, group, msg_id)
+        REDIS_CONSUMED.inc() # <- Métrica: mensaje consumido
 
 
 if __name__ == "__main__":

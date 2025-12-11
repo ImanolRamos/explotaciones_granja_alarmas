@@ -40,6 +40,41 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: edge_prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      # Mapeamos el archivo de configuración local a la ruta del contenedor
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Volumen persistente para los datos de las series temporales de Prometheus
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090" # Puerto de Prometheus UI
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: edge_grafana
+    volumes:
+      # Volumen persistente para la base de datos de Grafana
+      - grafana_data:/var/lib/grafana
+      # Para aprovisionar automáticamente la fuente de datos (Prometheus)
+      - ./grafana/provisioning/:/etc/grafana/provisioning/
+    environment:
+      # Credenciales iniciales (¡CÁMBIALAS!)
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=password
+    ports:
+      - "3000:3000" # Puerto de Grafana UI
+    depends_on:
+      - prometheus # Asegura que Prometheus esté listo antes que Grafana
+    restart: unless-stopped
 
 volumes:
   redis_data:
+  prometheus_data: # Nuevo volumen para Prometheus
+  grafana_data:    # Nuevo volumen para Grafana
