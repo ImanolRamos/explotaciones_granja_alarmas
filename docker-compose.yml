@@ -1,8 +1,45 @@
 services:
-  pushover-notifier:
-    build: .
-    env_file:
-      - .env
-    ports:
-      - "8800:8000"
+#  pushover-notifier:
+#    build: .
+#    env_file:
+#      - .env
+#    ports:
+#      - "8800:8000"
+#    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: edge_redis
     restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
+  plc_reader:
+    build: ./plc-reader
+    container_name: edge_plc_reader
+    restart: unless-stopped
+    env_file: ./.env
+    depends_on: [redis]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+
+  ingestor:
+    build: ./ingestor
+    container_name: edge_ingestor
+    restart: unless-stopped
+    env_file: ./.env
+    depends_on: [redis]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+
+volumes:
+  redis_data:

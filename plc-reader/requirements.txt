@@ -1,0 +1,3 @@
+pymcprotocol
+python-dotenv
+redis
