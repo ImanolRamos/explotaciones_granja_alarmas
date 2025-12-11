@@ -77,6 +77,7 @@ def main():
 
         except Exception as e:
             print(f"[ERROR] {e} -> reconnect in 2s")
+            PLC_CONNECTED.set(0) # <- Métrica: conectado
             try:
                 plc.close()
             except Exception:

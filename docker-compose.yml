@@ -64,10 +64,12 @@ services:
       - grafana_data:/var/lib/grafana
       # Para aprovisionar automáticamente la fuente de datos (Prometheus)
       - ./grafana/provisioning/:/etc/grafana/provisioning/
-    environment:
+    #environment:
       # Credenciales iniciales (¡CÁMBIALAS!)
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=password
+     # - GF_SECURITY_ADMIN_USER=admin
+     # - GF_SECURITY_ADMIN_PASSWORD=password
+    env_file:
+      - ./.env
     ports:
       - "3000:3000" # Puerto de Grafana UI
     depends_on:
