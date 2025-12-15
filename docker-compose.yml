@@ -40,6 +40,20 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  blackbox:
+    image: prom/blackbox-exporter:latest
+    container_name: edge_blackbox
+    restart: unless-stopped
+    cap_add:
+      - NET_RAW
+    volumes:
+      - ./blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    command:
+      - --config.file=/etc/blackbox_exporter/config.yml
+    ports:
+      - "9115:9115"
+
+
   prometheus:
     image: prom/prometheus:latest
     container_name: edge_prometheus

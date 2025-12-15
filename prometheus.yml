@@ -17,3 +17,18 @@ scrape_configs:
   - job_name: 'ingestor'
     static_configs:
       - targets: ['ingestor:8000']
+  #4. Scrape ping contra plc
+  - job_name: 'blackbox-icmp'
+    metrics_path: /probe
+    params:
+      module: [icmp]
+    static_configs:
+      - targets:
+          - 192.168.3.39
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: edge_blackbox:9115
