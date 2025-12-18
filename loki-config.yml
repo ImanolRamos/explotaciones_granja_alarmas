@@ -1,0 +1,41 @@
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9095
+
+common:
+  path_prefix: /loki/data
+  replication_factor: 1
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2025-12-16
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  tsdb_shipper:
+    active_index_directory: /loki/data/tsdb-index
+    cache_location: /loki/data/tsdb-cache
+    shared_store: filesystem
+
+  filesystem:
+    directory: /loki/data/chunks
+
+limits_config:
+  retention_period: 72h
+  max_query_lookback: 72h
+  allow_structured_metadata: true
+
+compactor:
+  working_directory: /loki/data/compactor
+  compaction_interval: 10m

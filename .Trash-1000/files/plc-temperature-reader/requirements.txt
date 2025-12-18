@@ -1,0 +1,4 @@
+pymcprotocol
+python-dotenv
+redis
+prometheus_client

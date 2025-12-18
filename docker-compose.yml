@@ -21,11 +21,11 @@ services:
     restart: unless-stopped
     env_file: ./.env
     depends_on: [redis]
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    # logging:
+    #   driver: "json-file"
+    #   options:
+    #     max-size: "10m"
+    #     max-file: "3"
 
 
   ingestor:
@@ -34,11 +34,55 @@ services:
     restart: unless-stopped
     env_file: ./.env
     depends_on: [redis]
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    # logging:
+    #   driver: "json-file"
+    #   options:
+    #     max-size: "10m"
+    #     max-file: "3"
+
+  plc-temperature-reader:
+    build: ./plc-temperature-reader
+    container_name: edge_plc_temperature_reader
+    restart: unless-stopped
+    env_file: ./.env
+    depends_on: [redis]
+   
+  temperature-ingestor:
+    build: ./temperature_ingestor
+    container_name: edge_temperature_ingestor
+    restart: unless-stopped
+    env_file: ./.env
+    depends_on: [redis]
+   
+
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: edge_loki
+    restart: unless-stopped
+    volumes:
+      - ./loki-config.yml:/etc/loki/config.yml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/config.yml
+    ports:
+      - "3100:3100"
+
+  promtail:
+    image: grafana/promtail:2.8.0
+    container_name: edge_promtail
+    restart: unless-stopped
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/snap/docker/common/var-lib-docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+      - plc_reader
+      - ingestor
+      - plc-temperature-reader # <--- AÑADIDO: Logs del Lector de Temperaturas
+      - temperature-ingestor   # <--- AÑADIDO: Logs del Ingestor de Temperaturas
+
 
   blackbox:
     image: prom/blackbox-exporter:latest
@@ -94,3 +138,4 @@ volumes:
   redis_data:
   prometheus_data: # Nuevo volumen para Prometheus
   grafana_data:    # Nuevo volumen para Grafana
+  loki_data:    ### NUEVO volumen para los logs de Loki
