@@ -1,141 +1,105 @@
 services:
-#  pushover-notifier:
-#    build: .
-#    env_file:
-#      - .env
-#    ports:
-#      - "8800:8000"
-#    restart: unless-stopped
-
+  # CAPA DE DATOS: Redis accesible desde bridge y host
   redis:
     image: redis:7-alpine
     container_name: edge_redis
-    restart: unless-stopped
+    restart: always
     command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"  # <--- Crucial para el PLC Reader (localhost)
     volumes:
       - redis_data:/data
+    networks:
+      - edge_network
 
+  # CAPA DE ADQUISICIÓN: Modo Host para hablar con el PLC físico
   plc_reader:
     build: ./plc-reader
     container_name: edge_plc_reader
-    restart: unless-stopped
+    restart: always
     env_file: ./.env
-    depends_on: [redis]
-    # logging:
-    #   driver: "json-file"
-    #   options:
-    #     max-size: "10m"
-    #     max-file: "3"
+    network_mode: host  # <--- Ve el PLC en 192.168.x.x y Redis en 127.0.0.1
+    depends_on:
+      - redis
 
-
+  # INGESTOR M-BITS: Red Bridge para resolver DNS de Mosquitto
   ingestor:
     build: ./ingestor
     container_name: edge_ingestor
-    restart: unless-stopped
+    restart: always
+    ports:
+      - "9105:9105"
     env_file: ./.env
-    depends_on: [redis]
-    # logging:
-    #   driver: "json-file"
-    #   options:
-    #     max-size: "10m"
-    #     max-file: "3"
+    networks:
+      - edge_network  # <--- Ve a Redis por su nombre "redis"
+    depends_on:
+      - redis
 
-  plc-temperature-reader:
-    build: ./plc-temperature-reader
-    container_name: edge_plc_temperature_reader
-    restart: unless-stopped
-    env_file: ./.env
-    depends_on: [redis]
-   
-  temperature-ingestor:
+  # INGESTOR D-TEMPS: Red Bridge
+  temperature_ingestor:
     build: ./temperature_ingestor
     container_name: edge_temperature_ingestor
-    restart: unless-stopped
+    restart: always
+    ports:
+      - "9106:9106"
     env_file: ./.env
-    depends_on: [redis]
-   
-
-
-  loki:
-    image: grafana/loki:2.9.0
-    container_name: edge_loki
-    restart: unless-stopped
-    volumes:
-      - ./loki-config.yml:/etc/loki/config.yml:ro
-      - loki_data:/loki
-    command: -config.file=/etc/loki/config.yml
-    ports:
-      - "3100:3100"
-
-  promtail:
-    image: grafana/promtail:2.8.0
-    container_name: edge_promtail
-    restart: unless-stopped
-    volumes:
-      - ./promtail-config.yml:/etc/promtail/config.yml:ro
-      - /var/snap/docker/common/var-lib-docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - edge_network
     depends_on:
-      - loki
-      - plc_reader
-      - ingestor
-      - plc-temperature-reader # <--- AÑADIDO: Logs del Lector de Temperaturas
-      - temperature-ingestor   # <--- AÑADIDO: Logs del Ingestor de Temperaturas
+      - redis
 
-
-  blackbox:
-    image: prom/blackbox-exporter:latest
-    container_name: edge_blackbox
-    restart: unless-stopped
-    cap_add:
-      - NET_RAW
-    volumes:
-      - ./blackbox.yml:/etc/blackbox_exporter/config.yml:ro
-    command:
-      - --config.file=/etc/blackbox_exporter/config.yml
+  sai-ingestor:
+    build: ./sai-ingestor
+    container_name: edge_sai_ingestor
+    restart: always
     ports:
-      - "9115:9115"
+      - "9107:9107"
+    env_file: ./.env
+    networks:
+      - edge_network
+    depends_on:
+      - redis
 
-
+  # MONITOREO
   prometheus:
     image: prom/prometheus:latest
     container_name: edge_prometheus
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.path=/prometheus
-      - --web.enable-lifecycle
+    restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # <--- ESTO ES VITAL
     volumes:
-      # Mapeamos el archivo de configuración local a la ruta del contenedor
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      # Volumen persistente para los datos de las series temporales de Prometheus
       - prometheus_data:/prometheus
     ports:
-      - "9090:9090" # Puerto de Prometheus UI
-    restart: unless-stopped
+      - "9090:9090"
+    networks:
+      - edge_network
 
   grafana:
     image: grafana/grafana:latest
     container_name: edge_grafana
+    restart: always
     volumes:
-      # Volumen persistente para la base de datos de Grafana
       - grafana_data:/var/lib/grafana
-      # Para aprovisionar automáticamente la fuente de datos (Prometheus)
-      - ./grafana/provisioning/:/etc/grafana/provisioning/
-    #environment:
-      # Credenciales iniciales (¡CÁMBIALAS!)
-     # - GF_SECURITY_ADMIN_USER=admin
-     # - GF_SECURITY_ADMIN_PASSWORD=password
-    env_file:
-      - ./.env
     ports:
-      - "3000:3000" # Puerto de Grafana UI
-    depends_on:
-      - prometheus # Asegura que Prometheus esté listo antes que Grafana
-    restart: unless-stopped
+      - "3000:3000"
+    networks:
+      - edge_network
+
+  blackbox_exporter:
+    image: prom/blackbox-exporter:latest
+    container_name: edge_blackbox
+    restart: always
+    networks:
+      - edge_network
+    cap_add:
+      - NET_RAW
+
+networks:
+  edge_network:
+    driver: bridge
 
 volumes:
   redis_data:
-  prometheus_data: # Nuevo volumen para Prometheus
-  grafana_data:    # Nuevo volumen para Grafana
-  loki_data:    ### NUEVO volumen para los logs de Loki
+  prometheus_data:
+  grafana_data:

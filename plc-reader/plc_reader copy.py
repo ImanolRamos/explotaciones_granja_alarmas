@@ -124,7 +124,7 @@ def main():
     reconnect_sleep = env_float("PLC_RECONNECT_SECONDS", 5.0)
 
     r = redis.Redis(
-        host=os.getenv("PLC_REDIS_HOST", "redis"),
+        host=os.getenv("REDIS_HOST", "redis"),
         port=env_int("REDIS_PORT", 6379),
         decode_responses=True,
         socket_timeout=2,
@@ -150,7 +150,6 @@ def main():
         PLC_SECONDS_SINCE_SUCCESS.set(0)
 
     while True:
-        PLC_CONNECTED.set(0) # Empezamos en 0
         connected = False
         try:
             logger.info(f"[PLC] conectando a {plc_ip}:{plc_port} ...")
@@ -167,7 +166,6 @@ def main():
            
 
             while True:
-                
                 with PLC_POLL_DURATION.time():
                     # --- Leer M ---
                     try:
@@ -181,17 +179,17 @@ def main():
                         push_error_to_redis(r, err_stream, err_maxlen, "plc_read_m", e)
                         raise
 
-                    # --- Leer D ---
-                    try:
-                        logger.info(f"[PLC] leyendo D{start_d}..D{end_d} ({count_d} valores)")
-                        values = plc.batchread_wordunits(f"D{start_d}", count_d)
-                        values = [int(v) for v in values]
-                    except Exception as e:
-                        logger.exception("[PLC_READ_D] Error en lectura D")
-                        PLC_ERRORS.labels(stage="plc_read_d", exc=type(e).__name__).inc()
-                        PLC_LAST_ERROR_UNIX.set(time.time())
-                        push_error_to_redis(r, err_stream, err_maxlen, "plc_read_d", e)
-                        raise
+                    # # --- Leer D ---
+                    # try:
+                    #     logger.info(f"[PLC] leyendo D{start_d}..D{end_d} ({count_d} valores)")
+                    #     values = plc.batchread_wordunits(f"D{start_d}", count_d)
+                    #     values = [int(v) for v in values]
+                    # except Exception as e:
+                    #     logger.exception("[PLC_READ_D] Error en lectura D")
+                    #     PLC_ERRORS.labels(stage="plc_read_d", exc=type(e).__name__).inc()
+                    #     PLC_LAST_ERROR_UNIX.set(time.time())
+                    #     push_error_to_redis(r, err_stream, err_maxlen, "plc_read_d", e)
+                    #     raise
                     
                     # Construir payload
                     ts = now_iso()

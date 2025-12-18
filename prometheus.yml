@@ -1,23 +1,60 @@
+# global:
+#   scrape_interval: 5s # Frecuencia con la que Prometheus revisará las métricas
+
+# scrape_configs:
+#   # 1. Scrape a Prometheus (para monitorizar su estado)
+#   - job_name: 'prometheus'
+#     static_configs:
+#       # - targets: ['localhost:9090']
+#       - targets: ['host.docker.internal:8000']
+
+#   # 2. Scrape al plc_reader
+#   - job_name: 'plc_reader'
+#     # Usa el nombre del servicio de Docker y el puerto 8000 (el que usaremos para exponer métricas)
+#     static_configs:
+#       - targets: ['plc_reader:8000'] 
+
+#   # 3. Scrape al ingestor
+#   - job_name: 'ingestor'
+#     static_configs:
+#       - targets: ['ingestor:8000']
+#   #4. Scrape ping contra plc
+#   - job_name: 'blackbox-icmp'
+#     metrics_path: /probe
+#     params:
+#       module: [icmp]
+#     static_configs:
+#       - targets:
+#           - 192.168.3.39
+#     relabel_configs:
+#       - source_labels: [__address__]
+#         target_label: __param_target
+#       - source_labels: [__param_target]
+#         target_label: instance
+#       - target_label: __address__
+#         replacement: edge_blackbox:9115
+
 global:
-  scrape_interval: 5s # Frecuencia con la que Prometheus revisará las métricas
+  scrape_interval: 5s 
 
 scrape_configs:
-  # 1. Scrape a Prometheus (para monitorizar su estado)
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
 
-  # 2. Scrape al plc_reader
   - job_name: 'plc_reader'
-    # Usa el nombre del servicio de Docker y el puerto 8000 (el que usaremos para exponer métricas)
     static_configs:
-      - targets: ['plc_reader:8000'] 
+      # host.docker.internal es la clave porque el PLC usa network_mode: host
+      - targets: ['host.docker.internal:8000'] 
 
-  # 3. Scrape al ingestor
-  - job_name: 'ingestor'
+  - job_name: 'ingestor_alarmas'
     static_configs:
-      - targets: ['ingestor:8000']
-  #4. Scrape ping contra plc
+      - targets: ['edge_ingestor:9105']
+
+  - job_name: 'ingestor_temperaturas'
+    static_configs:
+      - targets: ['edge_temperature_ingestor:9106']
+
   - job_name: 'blackbox-icmp'
     metrics_path: /probe
     params:
@@ -31,4 +68,4 @@ scrape_configs:
       - source_labels: [__param_target]
         target_label: instance
       - target_label: __address__
-        replacement: edge_blackbox:9115
+        replacement: blackbox_exporter:9115 # <-- Usa el nombre del servicio
