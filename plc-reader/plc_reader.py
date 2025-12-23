@@ -41,6 +41,9 @@ PLC_LAST_SUCCESS_UNIX = Gauge("plc_last_success_unix", "Timestamp unix de la úl
 PLC_SECONDS_SINCE_SUCCESS = Gauge("plc_seconds_since_success", "Segundos desde la última lectura OK")
 PLC_LAST_ERROR_UNIX = Gauge("plc_last_error_unix", "Timestamp unix del último error detectado")
 
+
+SCRIPT_HEARTBEAT = Gauge("script_last_run_timestamp_seconds", "Timestamp de la última iteración exitosa")
+
 # =========================
 # HELPERS
 # =========================
@@ -150,6 +153,7 @@ def main():
         PLC_SECONDS_SINCE_SUCCESS.set(0)
 
     while True:
+        SCRIPT_HEARTBEAT.set(time.time())
         PLC_CONNECTED.set(0) # Empezamos en 0
         connected = False
         try:

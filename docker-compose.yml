@@ -30,10 +30,17 @@ services:
     ports:
       - "9105:9105"
     env_file: ./.env
+    environment:
+      - REDIS_HOST=redis  # Usamos el nombre del servicio
     networks:
       - edge_network  # <--- Ve a Redis por su nombre "redis"
     depends_on:
       - redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"   # El archivo de log no pasará de 10MB
+        max-file: "3"    # Solo guarda los últimos 3 archivos
 
   # INGESTOR D-TEMPS: Red Bridge
   temperature_ingestor:

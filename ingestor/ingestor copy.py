@@ -25,8 +25,6 @@ def env_float(k, d): return float(os.getenv(k, d))
 def env_bool(k, d=False): return os.getenv(k, str(d)).lower() in ("1", "true", "yes")
 def iso_to_epoch(s): return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
 
-
-print("[METRICS] Iniciando servidor de métricas en puerto 9105")
 # =========================
 # MQTT CON DIAGNÓSTICO
 # =========================
@@ -75,46 +73,26 @@ def should_publish_by_rules(addr: int, value: int, bits: list[int]) -> bool:
 def main():
     load_dotenv()
 
-    # 1. Iniciar métricas una sola vez y manejar error si el puerto está ocupado
-    try:
-        print("[METRICS] Iniciando servidor de métricas en puerto 9105")
-        start_http_server(9105)
-    except Exception as e:
-        print(f"[METRICS] ⚠️ No se pudo iniciar el servidor (quizás ya está en uso): {e}")
+    print("[METRICS] Iniciando servidor de métricas en puerto 9105")
+    start_http_server(9105)
 
-    # 2. Configurar Redis con TIMEOUTS para evitar cuelgues infinitos
     print("[REDIS] Conectando a la base de datos...")
     r = redis.Redis(
         host=os.getenv("REDIS_HOST", "redis"),
         port=env_int("REDIS_PORT", 6379),
         decode_responses=True,
-        socket_connect_timeout=5,  # Si no conecta en 5s, da error
-        socket_timeout=5          # Si la operación tarda más de 5s, da error
     )
-    
+
     stream = os.getenv("REDIS_STREAM_KEY", "plc:m:stream")
     group = "ingestors"
     consumer = os.getenv("MQTT_CLIENT_ID", "edge-ingestor-1")
-    
-    print(f"[REDIS] Verificando/creando consumer group '{group}' en stream '{stream}'...")
 
     try:
-        # Probamos conexión antes de seguir
-        r.ping()
         r.xgroup_create(stream, group, id="0-0", mkstream=True)
-        print(f"[REDIS] ✅ Consumer group '{group}' verificado/creado.")
+        print(f"[REDIS] Consumer group '{group}' verificado/creado.")
     except redis.exceptions.ResponseError as e:
-        if "BUSYGROUP" in str(e):
-            print(f"[REDIS] ℹ️ El grupo '{group}' ya existe, continuando...")
-        else:
-            print(f"[REDIS] ❌ Error de Redis: {e}")
-    except Exception as e:
-        print(f"[REDIS] ❌ Error crítico de conexión: {e}")
-        return # Salir si no hay Redis
-
-    # 3. Configurar MQTT
-    print("[MQTT] Configurando cliente...")
-    mqttc = mqtt_client()
+        if "BUSYGROUP" not in str(e):
+            print(f"[REDIS] Error al crear grupo: {e}")
 
     mqttc = mqtt_client()
 
@@ -133,12 +111,10 @@ def main():
 
     print(f"[INGESTOR] 🚀 TODO LISTO. Escuchando stream: {stream}")
 
-    print("[INGESTOR] Iniciando bucle principal...")
     while True:
         SCRIPT_HEARTBEAT.set(time.time())
         try:
             resp = r.xreadgroup(group, consumer, {stream: ">"}, count=1, block=5000)
-            print("[DEBUG] xreadgroup response:", resp)
             if not resp:
                 continue
 
@@ -151,7 +127,6 @@ def main():
 
             now = time.time()
             can_publish = (now - last_publish_t) >= min_interval
-            print(f"[DEBUG] now={now}, last_publish_t={last_publish_t}, can_publish={can_publish}")
             
             # Lógica de detección de cambios e índices
             indices = []
@@ -170,7 +145,6 @@ def main():
                     addr = start_m + i
                     with MQTT_PUBLISH_DURATION.time():
                         info = mqttc.publish(f"{topic_base}/{addr}", str(int(bits[i])), qos=qos, retain=retain)
-                        print(f"[MQTT] Publicado {bits[i]} en {topic_base}/{addr} (rc={info.rc})")
                         if info.rc != mqtt.MQTT_ERR_SUCCESS: MQTT_PUBLISH_ERRORS.labels(type="single").inc()
                         else: MQTT_PUBLISHED.inc()
                 last_publish_t = now

@@ -54,7 +54,13 @@ scrape_configs:
   - job_name: 'ingestor_temperaturas'
     static_configs:
       - targets: ['edge_temperature_ingestor:9106']
+  
+  - job_name: 'sai_ingestor'
+    static_configs:
+      # - targets: ['edge_sai_ingestor:9107']
+    - targets: ['sai-ingestor:9107'] # <-- Usa el nombre del SERVICIO del compose
 
+  ### para hacer ping al PLC
   - job_name: 'blackbox-icmp'
     metrics_path: /probe
     params:

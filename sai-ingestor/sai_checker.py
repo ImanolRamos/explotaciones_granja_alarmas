@@ -5,6 +5,7 @@ import threading
 import requests
 from flask import Flask, jsonify
 import paho.mqtt.client as mqtt
+from prometheus_client import start_http_server, Gauge, Counter
 
 # =========================
 # CONFIGURACIÓN
@@ -20,6 +21,17 @@ MQTT_USER = os.getenv("MQTT_USERNAME", "")
 MQTT_PASS = os.getenv("MQTT_PASSWORD", "")
 MQTT_TOPIC = os.getenv("MQTT_UPS_TOPIC", "vpower/ups01/status")
 MQTT_CLIENT_ID = os.getenv("MQTT_SAI_CLIENT_ID", "ups-monitor-bridge")
+
+# Define las métricas al inicio
+SAI_STATUS = Gauge("sai_online", "1 si el bridge conecta con la API del SAI, 0 si no")
+SAI_BATTERY = Gauge("sai_battery_percent", "Porcentaje de batería")
+SAI_LOAD = Gauge("sai_load_percent", "Carga del SAI")
+SAI_MQTT_OK = Gauge("sai_mqtt_connected", "Estado conexión MQTT")
+SAI_POLLS = Counter("sai_poll_total", "Número de peticiones a la API del SAI")
+
+
+SCRIPT_HEARTBEAT = Gauge("script_last_run_timestamp_seconds", "Timestamp de la última iteración exitosa")
+
 
 app = Flask(__name__)
 sess = requests.Session()
@@ -108,26 +120,51 @@ def normalize(raw: dict) -> dict:
 # BUCLE DE POLLING Y ENVÍO
 # =========================
 def poll_loop():
+    # Iniciamos el servidor de métricas (mejor si lo mueves al __main__ como comentamos)
+    start_http_server(9107) 
     global _last_norm
+    
     while True:
         try:
             raw = fetch_req_monitor_data()
             _last_norm = normalize(raw)
             
-            # 🚀 ENVIAR POR MQTT
+            if _last_norm.get("ok"):
+                # 1. Lógica de Batería vs Línea (Tu propuesta)
+                # Extraemos el status_raw (ej: "Line Mode" o "Battery Mode")
+                status_raw = str(_last_norm.get("status_raw", "")).upper()
+                
+                if "LINE" in status_raw or "BYPASS" in status_raw:
+                    SAI_STATUS.set(1)  # 1 = RED ELÉCTRICA
+                elif "BATTERY" in status_raw:
+                    SAI_STATUS.set(0)  # 0 = MODO BATERÍA
+                else:
+                    SAI_STATUS.set(2)  # 2 = DESCONOCIDO / OTRO
+                
+                # 2. Actualizar el resto de métricas numéricas
+                SAI_BATTERY.set(_last_norm.get("battery_percent") or 0)
+                SAI_LOAD.set(_last_norm.get("load_percent") or 0)
+            else:
+                # Si la API del SAI no responde, marcamos como desconocido
+                SAI_STATUS.set(2)
+
+            # 3. Métricas de control del script
+            SAI_POLLS.inc() 
+            SAI_MQTT_OK.set(1 if mqttc and mqttc.is_connected() else 0)
+            SCRIPT_HEARTBEAT.set(time.time()) 
+            
+            # 🚀 Envío MQTT original
             if mqttc and mqttc.is_connected():
                 payload = json.dumps(_last_norm)
-                info = mqttc.publish(MQTT_TOPIC, payload, qos=1, retain=True)
-                # Opcional: imprimir para debug
-                if info.rc == mqtt.MQTT_ERR_SUCCESS:
-                    print(f"[POLL] Datos enviados a {MQTT_TOPIC}", flush=True)
+                mqttc.publish(MQTT_TOPIC, payload, qos=1, retain=True)
+                print(f"[POLL] Datos enviados a {MQTT_TOPIC} | Status: {status_raw}", flush=True)
             
         except Exception as e:
+            SAI_STATUS.set(2) # Error de conexión = Desconocido
             _last_norm = {"ok": False, "error": str(e)}
             print(f"[ERROR] {e}", flush=True)
             
         time.sleep(POLL_SECONDS)
-
 # =========================
 # ENDPOINTS FLASK
 # =========================

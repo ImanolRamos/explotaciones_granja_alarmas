@@ -17,6 +17,8 @@ MQTT_ERRORS = Counter("temp_ingestor_mqtt_errors_total", "Errores MQTT", ["type"
 MQTT_PUBLISH_DURATION = Histogram("temp_ingestor_mqtt_publish_duration_seconds", "Duración publish")
 PIPELINE_LAG_SECONDS = Histogram("temp_ingestor_pipeline_lag_seconds", "Lag desde PLC", buckets=(0.1, 0.5, 1, 2, 5))
 
+SCRIPT_HEARTBEAT = Gauge("script_last_run_timestamp_seconds", "Timestamp de la última iteración exitosa")
+
 def iso_to_epoch(s):
     try:
         return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
@@ -54,7 +56,7 @@ def mqtt_client():
 
     if user or pwd:
         c.username_pw_set(user, pwd)
-
+  
     c.reconnect_delay_set(1, 30)
     
     try:
@@ -83,9 +85,9 @@ def main():
         decode_responses=True,
     )
 
-    stream = os.getenv("REDIS_TEMP_STREAM", "plc:temp:stream")
+    stream = os.getenv("REDIS_STREAM_TEMPS", "plc:temp:stream")
     group = "temp_ingestors"
-    consumer = os.getenv("MQTT_CLIENT_ID", "temp-ingestor")
+    consumer = os.getenv("MQTT_TEMPERATURE_CLIENT_ID", "temp-ingestor")
 
     try:
         r.xgroup_create(stream, group, id="0-0", mkstream=True)
@@ -103,6 +105,7 @@ def main():
     last_pending_check = 0
 
     while True:
+        SCRIPT_HEARTBEAT.set(time.time())
         resp = r.xreadgroup(group, consumer, {stream: ">"}, count=10, block=5000)
         if not resp:
             continue
